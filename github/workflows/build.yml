@@ -1,0 +1,33 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Scarica il codice
+        uses: actions/checkout@v4
+
+      - name: Installa Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Installa le dipendenze
+        run: |
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Compila il .exe
+        run: pyinstaller --onefile --windowed --name "MagazzinoTappeti" magazzino_tappeti.py
+
+      - name: Carica il .exe come artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MagazzinoTappeti-Windows
+          path: dist/MagazzinoTappeti.exe
+          retention-days: 30
