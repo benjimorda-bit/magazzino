@@ -23,7 +23,19 @@ jobs:
           pip install -r requirements.txt
 
       - name: Compila il .exe
-        run: pyinstaller --onefile --windowed --name "MagazzinoTappeti" magazzino_tappeti.py
+        run: >
+          pyinstaller
+          --onefile
+          --windowed
+          --name "MagazzinoTappeti"
+          --collect-all customtkinter
+          --collect-all tksheet
+          --hidden-import customtkinter
+          --hidden-import tksheet
+          --hidden-import pandas
+          --hidden-import openpyxl
+          --hidden-import openpyxl.styles.builtins
+          magazzino_tappeti.py
 
       - name: Carica il .exe come artifact
         uses: actions/upload-artifact@v4
