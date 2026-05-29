@@ -19,3 +19,6 @@ __pycache__/
 build/
 dist/
 *.spec
+
+# File di backup locali
+*.bak
