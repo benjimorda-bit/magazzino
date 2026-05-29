@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from tkinter import messagebox, filedialog
 import customtkinter as ctk
 import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from tksheet import Sheet
 
 ctk.set_appearance_mode("light")
@@ -39,6 +41,10 @@ OPZIONI_STATO = ["Disponibile", "Venduto"]
 OPZIONI_EPOCA = ["Nuovo", "Vecchio", "Antico"]
 OPZIONI_QUALITA = ["Medio", "Fine", "Commerciale", "Extra"]
 OPZIONI_DISEGNO = ["Etnico", "Classico", "Decorativo", "Moderno"]
+OPZIONI_PROVENIENZA = [
+    "Iran", "Turchia", "Caucaso", "Russia", "Cina",
+    "Nepal", "Afghanistan", "India", "Pakistan", "Marocco"
+]
 
 LARGHEZZE_COLONNE = {
     "Stato": 90, "Nr": 65, "Nome": 155, "Provenienza": 100,
@@ -85,6 +91,76 @@ def _parse_numero(val_str: str) -> float:
         return float(s)
     except ValueError:
         return 0.0
+
+
+def formatta_excel_per_stampa(percorso: str):
+    """Applica al file Excel uno stile pronto per la stampa:
+    bordi su tutte le celle, header in grassetto con sfondo grigio chiaro,
+    larghezza colonne auto-regolata, e griglia di stampa attiva."""
+    try:
+        wb = load_workbook(percorso)
+        ws = wb.active
+
+        # Bordi sottili su tutte le celle
+        lato = Side(border_style="thin", color="000000")
+        bordo = Border(left=lato, right=lato, top=lato, bottom=lato)
+        for row in ws.iter_rows(min_row=1, max_row=ws.max_row,
+                                 min_col=1, max_col=ws.max_column):
+            for cell in row:
+                cell.border = bordo
+                cell.alignment = Alignment(vertical="center", wrap_text=False)
+
+        # Header in grassetto con sfondo grigio chiaro
+        grassetto = Font(bold=True, size=11)
+        sfondo = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
+        for cell in ws[1]:
+            cell.font = grassetto
+            cell.fill = sfondo
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Auto-larghezza colonne (basata sul contenuto, con minimo e massimo)
+        for col_cells in ws.columns:
+            lunghezze = []
+            for cell in col_cells:
+                if cell.value is not None:
+                    lunghezze.append(len(str(cell.value)))
+            if lunghezze:
+                massimo = max(lunghezze)
+                larghezza = min(max(massimo + 2, 8), 40)
+                ws.column_dimensions[col_cells[0].column_letter].width = larghezza
+
+        # Impostazioni di stampa: griglia visibile, orientamento orizzontale
+        ws.print_options.gridLines = True
+        ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.print_title_rows = "1:1"  # ripete l'header su ogni pagina stampata
+
+        wb.save(percorso)
+    except Exception:
+        # Non bloccare l'export se la formattazione fallisce
+        pass
+
+
+def _chiave_naturale_nr(valore) -> list:
+    """Chiave di ordinamento 'naturale' per il codice Nr.
+    Funziona sia con codici puramente numerici (es. 216, 224, 226)
+    che con codici alfanumerici (es. T001, T010, T100)."""
+    s = str(valore).strip()
+    return [int(t) if t.isdigit() else t.lower()
+            for t in re.split(r"(\d+)", s)]
+
+
+def ordina_df_per_nr(df: pd.DataFrame) -> pd.DataFrame:
+    """Ordina un dataframe per Nr in ordine crescente naturale."""
+    if df.empty:
+        return df
+    indici_ordinati = sorted(
+        df.index,
+        key=lambda i: _chiave_naturale_nr(df.loc[i, "Nr"])
+    )
+    return df.loc[indici_ordinati].reset_index(drop=True)
 
 
 class AutocompleteEntry(ctk.CTkFrame):
@@ -264,7 +340,8 @@ class GestoreDatabase:
         if filtri.get("stato") and filtri["stato"] != "Tutti":
             df_filtrato = df_filtrato[df_filtrato["Stato"] == filtri["stato"]]
 
-        return df_filtrato
+        # Ordina sempre per Nr crescente
+        return ordina_df_per_nr(df_filtrato)
 
     def ottieni_disponibili(self) -> pd.DataFrame:
         """Restituisce solo i tappeti disponibili."""
@@ -718,14 +795,21 @@ class FrameCercaElenco(ctk.CTkFrame):
 
         if percorso:
             try:
-                self.df_visualizzato.to_excel(percorso, index=False, engine="openpyxl")
+                # Esclude Data Vendita e Note dalla stampa
+                colonne_da_escludere = ["Data Vendita", "Note"]
+                df_stampa = self.df_visualizzato.drop(
+                    columns=[c for c in colonne_da_escludere
+                             if c in self.df_visualizzato.columns]
+                )
+                df_stampa.to_excel(percorso, index=False, engine="openpyxl")
+                formatta_excel_per_stampa(percorso)
                 messagebox.showinfo("Completato", f"File esportato con successo:\n{percorso}")
             except Exception as e:
                 messagebox.showerror("Errore", f"Errore durante l'esportazione:\n{e}")
 
     def aggiorna_dati(self):
         """Aggiorna i dati dal database."""
-        self.df_visualizzato = self.gestore_db.df.copy()
+        self.df_visualizzato = ordina_df_per_nr(self.gestore_db.df.copy())
         self._aggiorna_tabella()
 
 
@@ -753,7 +837,7 @@ class FrameAggiungiTappeto(ctk.CTkFrame):
         campi = [
             ("Nr",          "entry",   True,  "Es. T001"),
             ("Nome",        "entry",   True,  "Nome del tappeto"),
-            ("Provenienza", "entry",   False, "Es. Iran, Turchia..."),
+            ("Provenienza", "combo",   False, None),
             ("Misura",      "entry",   True,  "Es. 200x150 (cm x cm)"),
             ("UM",          "entry",   False, "Es. mq, pezzo..."),
             ("Epoca",       "combo",   False, None),
@@ -791,6 +875,8 @@ class FrameAggiungiTappeto(ctk.CTkFrame):
                     valori = OPZIONI_EPOCA
                 elif nome == "Qualita":
                     valori = OPZIONI_QUALITA
+                elif nome == "Provenienza":
+                    valori = OPZIONI_PROVENIENZA
                 else:
                     valori = OPZIONI_DISEGNO
                 widget = ctk.CTkComboBox(frame_campo, values=valori, width=250)
@@ -1056,8 +1142,11 @@ class FrameRegistraVendita(ctk.CTkFrame):
                 for _, row in disponibili.iterrows()
             ]
             self.campo_ricerca.set_values(opzioni)
-            self.campo_ricerca.set(opzioni[0])
-            self._mostra_dettagli_tappeto(opzioni[0])
+            # Non pre-seleziona alcun tappeto: il campo resta vuoto finché
+            # l'utente non digita o sceglie esplicitamente.
+            self.campo_ricerca.set("")
+            for lbl in self.labels_dettagli.values():
+                lbl.configure(text="—")
 
     def _conferma_vendita(self):
         """Conferma e registra la vendita."""
