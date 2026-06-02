@@ -98,29 +98,32 @@ def _parse_numero(val_str: str) -> float:
         return 0.0
 
 
-def formatta_excel_per_stampa(percorso: str):
+def formatta_excel_per_stampa(percorso: str, totali: dict = None):
     """Applica al file Excel uno stile pronto per la stampa:
     bordi su tutte le celle, header in grassetto con sfondo grigio chiaro,
-    larghezza colonne auto-regolata, e griglia di stampa attiva."""
+    larghezza colonne auto-regolata, griglia di stampa attiva, e
+    box totali in fondo (se fornito)."""
     try:
         wb = load_workbook(percorso)
         ws = wb.active
 
-        # Bordi sottili su tutte le celle
+        # Bordi sottili su tutte le celle dati
         lato = Side(border_style="thin", color="000000")
         bordo = Border(left=lato, right=lato, top=lato, bottom=lato)
-        for row in ws.iter_rows(min_row=1, max_row=ws.max_row,
-                                 min_col=1, max_col=ws.max_column):
+        ultima_riga_dati = ws.max_row
+        ultima_colonna_dati = ws.max_column
+        for row in ws.iter_rows(min_row=1, max_row=ultima_riga_dati,
+                                 min_col=1, max_col=ultima_colonna_dati):
             for cell in row:
                 cell.border = bordo
                 cell.alignment = Alignment(vertical="center", wrap_text=False)
 
         # Header in grassetto con sfondo grigio chiaro
-        grassetto = Font(bold=True, size=11)
-        sfondo = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
+        grassetto_header = Font(bold=True, size=11)
+        sfondo_header = PatternFill(start_color="E0E0E0", end_color="E0E0E0", fill_type="solid")
         for cell in ws[1]:
-            cell.font = grassetto
-            cell.fill = sfondo
+            cell.font = grassetto_header
+            cell.fill = sfondo_header
             cell.alignment = Alignment(horizontal="center", vertical="center")
 
         # Auto-larghezza colonne (basata sul contenuto, con minimo e massimo)
@@ -133,6 +136,55 @@ def formatta_excel_per_stampa(percorso: str):
                 massimo = max(lunghezze)
                 larghezza = min(max(massimo + 2, 8), 40)
                 ws.column_dimensions[col_cells[0].column_letter].width = larghezza
+
+        # Box totali in fondo (se fornito)
+        if totali:
+            start_row = ultima_riga_dati + 2  # una riga vuota di spacing
+
+            # Etichetta titolo TOTALI
+            ws.cell(row=start_row, column=1).value = "TOTALI"
+            ws.cell(row=start_row, column=1).font = Font(bold=True, size=13, color="FFFFFF")
+            ws.cell(row=start_row, column=1).fill = PatternFill(
+                start_color="3B82F6", end_color="3B82F6", fill_type="solid"
+            )
+            ws.cell(row=start_row, column=1).alignment = Alignment(
+                horizontal="center", vertical="center"
+            )
+            ws.cell(row=start_row, column=1).border = bordo
+            # Estendi lo sfondo del titolo sulla cella accanto
+            ws.cell(row=start_row, column=2).fill = PatternFill(
+                start_color="3B82F6", end_color="3B82F6", fill_type="solid"
+            )
+            ws.cell(row=start_row, column=2).border = bordo
+
+            voci = [
+                ("Pezzi totali",   str(totali.get("pezzi", 0))),
+                ("MQ totali",      f"{totali.get('mq', 0):.2f}"),
+                ("Costo totale",   f"{formatta_prezzo(totali.get('costo', 0)) or '0'} €"),
+                ("Listino totale", f"{formatta_prezzo(totali.get('listino', 0)) or '0'} €"),
+                ("Incasso totale", f"{formatta_prezzo(totali.get('incasso', 0)) or '0'} €"),
+            ]
+            grassetto_tot = Font(bold=True, size=11)
+            sfondo_label = PatternFill(start_color="F3F4F6", end_color="F3F4F6", fill_type="solid")
+            for i, (label, valore) in enumerate(voci):
+                row = start_row + 1 + i
+                # Cella etichetta
+                cell_label = ws.cell(row=row, column=1)
+                cell_label.value = label
+                cell_label.font = grassetto_tot
+                cell_label.fill = sfondo_label
+                cell_label.border = bordo
+                cell_label.alignment = Alignment(
+                    horizontal="left", vertical="center", indent=1
+                )
+                # Cella valore
+                cell_val = ws.cell(row=row, column=2)
+                cell_val.value = valore
+                cell_val.font = grassetto_tot
+                cell_val.border = bordo
+                cell_val.alignment = Alignment(
+                    horizontal="right", vertical="center", indent=1
+                )
 
         # Impostazioni di stampa: griglia visibile, orientamento orizzontale
         ws.print_options.gridLines = True
@@ -800,14 +852,28 @@ class FrameCercaElenco(ctk.CTkFrame):
 
         if percorso:
             try:
+                # Calcola i totali sui valori NUMERICI originali
+                # (prima di qualsiasi formattazione/rimozione di colonne)
+                totali = {
+                    "pezzi":   len(self.df_visualizzato),
+                    "mq":      float(self.df_visualizzato["MQ"].sum()),
+                    "costo":   float(self.df_visualizzato["Costo"].sum()),
+                    "listino": float(self.df_visualizzato["Listino"].sum()),
+                    "incasso": float(self.df_visualizzato["Prezzo Vendita Effettivo"].sum()),
+                }
+
                 # Esclude Data Vendita e Note dalla stampa
                 colonne_da_escludere = ["Data Vendita", "Note"]
                 df_stampa = self.df_visualizzato.drop(
                     columns=[c for c in colonne_da_escludere
                              if c in self.df_visualizzato.columns]
-                )
+                ).reset_index(drop=True)
+
+                # Aggiunge numero progressivo identificativo come prima colonna
+                df_stampa.insert(0, "#", range(1, len(df_stampa) + 1))
+
                 df_stampa.to_excel(percorso, index=False, engine="openpyxl")
-                formatta_excel_per_stampa(percorso)
+                formatta_excel_per_stampa(percorso, totali=totali)
                 messagebox.showinfo("Completato", f"File esportato con successo:\n{percorso}")
             except Exception as e:
                 messagebox.showerror("Errore", f"Errore durante l'esportazione:\n{e}")
