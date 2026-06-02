@@ -137,54 +137,19 @@ def formatta_excel_per_stampa(percorso: str, totali: dict = None):
                 larghezza = min(max(massimo + 2, 8), 40)
                 ws.column_dimensions[col_cells[0].column_letter].width = larghezza
 
-        # Box totali in fondo (se fornito)
+        # Totali come piè di pagina (visibile solo in stampa, su una riga,
+        # in basso, staccato dai dati). Appare in fondo a OGNI pagina stampata.
         if totali:
-            start_row = ultima_riga_dati + 2  # una riga vuota di spacing
-
-            # Etichetta titolo TOTALI
-            ws.cell(row=start_row, column=1).value = "TOTALI"
-            ws.cell(row=start_row, column=1).font = Font(bold=True, size=13, color="FFFFFF")
-            ws.cell(row=start_row, column=1).fill = PatternFill(
-                start_color="3B82F6", end_color="3B82F6", fill_type="solid"
+            totali_str = (
+                f"Pezzi totali: {totali.get('pezzi', 0)}     "
+                f"MQ totali: {totali.get('mq', 0):.2f}     "
+                f"Costo totale: {formatta_prezzo(totali.get('costo', 0)) or '0'} €     "
+                f"Listino totale: {formatta_prezzo(totali.get('listino', 0)) or '0'} €     "
+                f"Incasso totale: {formatta_prezzo(totali.get('incasso', 0)) or '0'} €"
             )
-            ws.cell(row=start_row, column=1).alignment = Alignment(
-                horizontal="center", vertical="center"
-            )
-            ws.cell(row=start_row, column=1).border = bordo
-            # Estendi lo sfondo del titolo sulla cella accanto
-            ws.cell(row=start_row, column=2).fill = PatternFill(
-                start_color="3B82F6", end_color="3B82F6", fill_type="solid"
-            )
-            ws.cell(row=start_row, column=2).border = bordo
-
-            voci = [
-                ("Pezzi totali",   str(totali.get("pezzi", 0))),
-                ("MQ totali",      f"{totali.get('mq', 0):.2f}"),
-                ("Costo totale",   f"{formatta_prezzo(totali.get('costo', 0)) or '0'} €"),
-                ("Listino totale", f"{formatta_prezzo(totali.get('listino', 0)) or '0'} €"),
-                ("Incasso totale", f"{formatta_prezzo(totali.get('incasso', 0)) or '0'} €"),
-            ]
-            grassetto_tot = Font(bold=True, size=11)
-            sfondo_label = PatternFill(start_color="F3F4F6", end_color="F3F4F6", fill_type="solid")
-            for i, (label, valore) in enumerate(voci):
-                row = start_row + 1 + i
-                # Cella etichetta
-                cell_label = ws.cell(row=row, column=1)
-                cell_label.value = label
-                cell_label.font = grassetto_tot
-                cell_label.fill = sfondo_label
-                cell_label.border = bordo
-                cell_label.alignment = Alignment(
-                    horizontal="left", vertical="center", indent=1
-                )
-                # Cella valore
-                cell_val = ws.cell(row=row, column=2)
-                cell_val.value = valore
-                cell_val.font = grassetto_tot
-                cell_val.border = bordo
-                cell_val.alignment = Alignment(
-                    horizontal="right", vertical="center", indent=1
-                )
+            ws.oddFooter.center.text = totali_str
+            ws.oddFooter.center.size = 11
+            ws.oddFooter.center.font = "Arial,Bold"
 
         # Impostazioni di stampa: griglia visibile, orientamento orizzontale
         ws.print_options.gridLines = True
