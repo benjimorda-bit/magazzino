@@ -45,6 +45,11 @@ OPZIONI_PROVENIENZA = [
     "Iran", "Turchia", "Caucaso", "Russia", "Cina",
     "Nepal", "Afghanistan", "India", "Pakistan", "Marocco"
 ]
+OPZIONI_UM = [
+    "corsia", "corsietta", "pedana", "zarunim", "sajade",
+    "parde", "250x2", "3x2", "3x250", "350x250", "4x3",
+    "grande", "kelley", "tondo"
+]
 
 LARGHEZZE_COLONNE = {
     "Stato": 90, "Nr": 65, "Nome": 155, "Provenienza": 100,
@@ -839,7 +844,7 @@ class FrameAggiungiTappeto(ctk.CTkFrame):
             ("Nome",        "entry",   True,  "Nome del tappeto"),
             ("Provenienza", "combo",   False, None),
             ("Misura",      "entry",   True,  "Es. 200x150 (cm x cm)"),
-            ("UM",          "entry",   False, "Es. mq, pezzo..."),
+            ("UM",          "combo",   False, None),
             ("Epoca",       "combo",   False, None),
             ("Qualita",     "combo",   False, None),
             ("Disegno",     "combo",   False, None),
@@ -877,6 +882,8 @@ class FrameAggiungiTappeto(ctk.CTkFrame):
                     valori = OPZIONI_QUALITA
                 elif nome == "Provenienza":
                     valori = OPZIONI_PROVENIENZA
+                elif nome == "UM":
+                    valori = OPZIONI_UM
                 else:
                     valori = OPZIONI_DISEGNO
                 widget = ctk.CTkComboBox(frame_campo, values=valori, width=250)
