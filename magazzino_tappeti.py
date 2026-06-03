@@ -13,6 +13,7 @@ import customtkinter as ctk
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.worksheet.page import PageMargins
 from tksheet import Sheet
 
 ctk.set_appearance_mode("light")
@@ -158,6 +159,15 @@ def formatta_excel_per_stampa(percorso: str, totali: dict = None):
         ws.page_setup.fitToHeight = 0
         ws.sheet_properties.pageSetUpPr.fitToPage = True
         ws.print_title_rows = "1:1"  # ripete l'header su ogni pagina stampata
+
+        # Margini ridotti per usare quasi tutta la pagina (valori in pollici)
+        ws.page_margins = PageMargins(
+            left=0.3, right=0.3,
+            top=0.4, bottom=0.55,
+            header=0.2, footer=0.25
+        )
+        # Centra la tabella orizzontalmente sulla pagina
+        ws.print_options.horizontalCentered = True
 
         wb.save(percorso)
     except Exception:
